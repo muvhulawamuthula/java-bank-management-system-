@@ -1,0 +1,9 @@
+/Users/asanda/Desktop/java/Bank_Management_system-main-2/bankapp/src/main/java/com/bankafrica/bankingapp/BankingappApplication.java
+/Users/asanda/Desktop/java/Bank_Management_system-main-2/bankapp/src/main/java/com/bankafrica/bankingapp/controller/AuthController.java
+/Users/asanda/Desktop/java/Bank_Management_system-main-2/bankapp/src/main/java/com/bankafrica/bankingapp/controller/BankingController.java
+/Users/asanda/Desktop/java/Bank_Management_system-main-2/bankapp/src/main/java/com/bankafrica/bankingapp/model/BankAccount.java
+/Users/asanda/Desktop/java/Bank_Management_system-main-2/bankapp/src/main/java/com/bankafrica/bankingapp/model/User.java
+/Users/asanda/Desktop/java/Bank_Management_system-main-2/bankapp/src/main/java/com/bankafrica/bankingapp/repository/BankAccountRepository.java
+/Users/asanda/Desktop/java/Bank_Management_system-main-2/bankapp/src/main/java/com/bankafrica/bankingapp/repository/UserRepository.java
+/Users/asanda/Desktop/java/Bank_Management_system-main-2/bankapp/src/main/java/com/bankafrica/bankingapp/service/AuthService.java
+/Users/asanda/Desktop/java/Bank_Management_system-main-2/bankapp/src/main/java/com/bankafrica/bankingapp/service/BankingService.java

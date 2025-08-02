@@ -1,0 +1,15 @@
+com/bankafrica/bankingapp/controller/AuthControllerTest.class
+com/bankafrica/bankingapp/repository/UserRepositoryTest.class
+com/bankafrica/bankingapp/service/AuthServiceTest.class
+com/bankafrica/bankingapp/controller/ControllerErrorHandlingTest.class
+com/bankafrica/bankingapp/model/BankAccountTest.class
+com/bankafrica/bankingapp/service/BankingServiceTest.class
+com/bankafrica/bankingapp/util/TestDataFactory.class
+com/bankafrica/bankingapp/model/UserTest.class
+com/bankafrica/bankingapp/controller/BankingControllerTest.class
+com/bankafrica/bankingapp/BankingappApplicationTests.class
+com/bankafrica/bankingapp/service/AuthServiceValidationTest.class
+com/bankafrica/bankingapp/service/BankingServiceTransactionTest.class
+com/bankafrica/bankingapp/repository/BankAccountRepositoryTest.class
+com/bankafrica/bankingapp/config/TestConfig.class
+com/bankafrica/bankingapp/BaseTest.class
