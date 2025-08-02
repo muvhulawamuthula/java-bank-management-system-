@@ -1,0 +1,9 @@
+com/bankafrica/bankingapp/BankingappApplication.class
+com/bankafrica/bankingapp/repository/BankAccountRepository.class
+com/bankafrica/bankingapp/service/AuthService.class
+com/bankafrica/bankingapp/model/User.class
+com/bankafrica/bankingapp/controller/BankingController.class
+com/bankafrica/bankingapp/model/BankAccount.class
+com/bankafrica/bankingapp/service/BankingService.class
+com/bankafrica/bankingapp/controller/AuthController.class
+com/bankafrica/bankingapp/repository/UserRepository.class

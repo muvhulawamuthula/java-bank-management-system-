@@ -1,0 +1,15 @@
+/Users/asanda/Desktop/java/Bank_Management_system-main-2/bankapp/src/test/java/com/bankafrica/bankingapp/BankingappApplicationTests.java
+/Users/asanda/Desktop/java/Bank_Management_system-main-2/bankapp/src/test/java/com/bankafrica/bankingapp/BaseTest.java
+/Users/asanda/Desktop/java/Bank_Management_system-main-2/bankapp/src/test/java/com/bankafrica/bankingapp/config/TestConfig.java
+/Users/asanda/Desktop/java/Bank_Management_system-main-2/bankapp/src/test/java/com/bankafrica/bankingapp/controller/AuthControllerTest.java
+/Users/asanda/Desktop/java/Bank_Management_system-main-2/bankapp/src/test/java/com/bankafrica/bankingapp/controller/BankingControllerTest.java
+/Users/asanda/Desktop/java/Bank_Management_system-main-2/bankapp/src/test/java/com/bankafrica/bankingapp/controller/ControllerErrorHandlingTest.java
+/Users/asanda/Desktop/java/Bank_Management_system-main-2/bankapp/src/test/java/com/bankafrica/bankingapp/model/BankAccountTest.java
+/Users/asanda/Desktop/java/Bank_Management_system-main-2/bankapp/src/test/java/com/bankafrica/bankingapp/model/UserTest.java
+/Users/asanda/Desktop/java/Bank_Management_system-main-2/bankapp/src/test/java/com/bankafrica/bankingapp/repository/BankAccountRepositoryTest.java
+/Users/asanda/Desktop/java/Bank_Management_system-main-2/bankapp/src/test/java/com/bankafrica/bankingapp/repository/UserRepositoryTest.java
+/Users/asanda/Desktop/java/Bank_Management_system-main-2/bankapp/src/test/java/com/bankafrica/bankingapp/service/AuthServiceTest.java
+/Users/asanda/Desktop/java/Bank_Management_system-main-2/bankapp/src/test/java/com/bankafrica/bankingapp/service/AuthServiceValidationTest.java
+/Users/asanda/Desktop/java/Bank_Management_system-main-2/bankapp/src/test/java/com/bankafrica/bankingapp/service/BankingServiceTest.java
+/Users/asanda/Desktop/java/Bank_Management_system-main-2/bankapp/src/test/java/com/bankafrica/bankingapp/service/BankingServiceTransactionTest.java
+/Users/asanda/Desktop/java/Bank_Management_system-main-2/bankapp/src/test/java/com/bankafrica/bankingapp/util/TestDataFactory.java
