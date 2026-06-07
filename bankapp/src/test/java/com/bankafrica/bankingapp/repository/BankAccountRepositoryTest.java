@@ -1,13 +1,12 @@
 package com.bankafrica.bankingapp.repository;
 
+import com.bankafrica.bankingapp.BaseTest;
 import com.bankafrica.bankingapp.model.BankAccount;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
-import org.springframework.boot.test.autoconfigure.orm.jpa.TestEntityManager;
-import org.springframework.test.context.ActiveProfiles;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.Optional;
@@ -15,15 +14,11 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Integration tests for the BankAccountRepository.
- * Uses @DataJpaTest to test the repository with an in-memory database.
+ * Integration tests for the BankAccountRepository, running against the shared
+ * in-memory database with each test rolled back.
  */
-@DataJpaTest
-@ActiveProfiles("test")
-class BankAccountRepositoryTest {
-
-    @Autowired
-    private TestEntityManager entityManager;
+@Transactional
+class BankAccountRepositoryTest extends BaseTest {
 
     @Autowired
     private BankAccountRepository bankAccountRepository;
@@ -38,8 +33,7 @@ class BankAccountRepositoryTest {
         testAccount = new BankAccount(ACCOUNT_HOLDER_NAME, INITIAL_BALANCE);
         
         // Save the account to the database
-        entityManager.persist(testAccount);
-        entityManager.flush();
+        bankAccountRepository.saveAndFlush(testAccount);
     }
 
     @Test

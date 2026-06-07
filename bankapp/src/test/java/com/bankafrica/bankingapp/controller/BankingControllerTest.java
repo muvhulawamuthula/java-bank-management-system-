@@ -1,263 +1,247 @@
 package com.bankafrica.bankingapp.controller;
 
-import com.bankafrica.bankingapp.model.BankAccount;
-import com.bankafrica.bankingapp.service.BankingService;
+import com.bankafrica.bankingapp.BaseTest;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
-import java.util.HashMap;
 import java.util.Map;
 
 import static org.hamcrest.Matchers.*;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 /**
- * Integration tests for the BankingController.
- * Uses @WebMvcTest to test the controller's REST endpoints.
+ * End-to-end tests of the account endpoints. Operations act on the authenticated user's
+ * own account (resolved from the JWT), so these also serve as regression tests for the
+ * authentication and authorization rules.
  */
-@WebMvcTest(BankingController.class)
-@ActiveProfiles("test")
-class BankingControllerTest {
+@Transactional
+class BankingControllerTest extends BaseTest {
 
     @Autowired
     private MockMvc mockMvc;
-
     @Autowired
     private ObjectMapper objectMapper;
 
-    @MockBean
-    private BankingService bankingService;
-
-    private BankAccount testAccount;
-    private final String ACCOUNT_HOLDER_NAME = "John Doe";
-    private final BigDecimal INITIAL_BALANCE = new BigDecimal("1000.00");
-    private final Long ACCOUNT_ID = 1L;
-
-    @BeforeEach
-    void setUp() {
-        // Create a test bank account
-        testAccount = new BankAccount(ACCOUNT_HOLDER_NAME, INITIAL_BALANCE);
-        testAccount.setId(ACCOUNT_ID);
-        testAccount.setAccountNumber("1234567890");
-    }
-
     @Test
-    @DisplayName("Test get account by ID")
-    void testGetAccount() throws Exception {
-        // Mock service behavior
-        when(bankingService.getAccount(ACCOUNT_ID)).thenReturn(testAccount);
+    @DisplayName("Authenticated user can view their account")
+    void testGetOwnAccount() throws Exception {
+        String token = register("a@example.com", "9001015000010").token;
 
-        // Perform request and verify response
-        mockMvc.perform(get("/api/accounts/{accountId}", ACCOUNT_ID))
+        mockMvc.perform(get("/api/account").header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.id", is(1)))
-                .andExpect(jsonPath("$.accountHolderName", is(ACCOUNT_HOLDER_NAME)))
-                .andExpect(jsonPath("$.balance", is(1000.00)))
-                .andExpect(jsonPath("$.accountNumber", is("1234567890")));
+                .andExpect(jsonPath("$.balance", is(500.00)))
+                .andExpect(jsonPath("$.accountNumber", matchesPattern("\\d{10}")));
     }
 
     @Test
-    @DisplayName("Test get non-existent account")
-    void testGetNonExistentAccount() throws Exception {
-        // Mock service behavior
-        when(bankingService.getAccount(999L)).thenReturn(null);
+    @DisplayName("Deposit increases the balance and appears in the ledger")
+    void testDeposit() throws Exception {
+        String token = register("b@example.com", "9001015000011").token;
 
-        // Perform request and verify response
-        mockMvc.perform(get("/api/accounts/{accountId}", 999))
+        mockMvc.perform(post("/api/account/deposit")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"amount\": 250.00}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.balance", is(750.00)));
+
+        mockMvc.perform(get("/api/account/transactions").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                // opening deposit + this deposit, in the paginated envelope
+                .andExpect(jsonPath("$.content", hasSize(2)))
+                .andExpect(jsonPath("$.totalElements", is(2)))
+                .andExpect(jsonPath("$.page", is(0)))
+                .andExpect(jsonPath("$.first", is(true)))
+                .andExpect(jsonPath("$.last", is(true)));
+    }
+
+    @Test
+    @DisplayName("Withdrawing more than the balance returns 422 and leaves the balance intact")
+    void testWithdrawInsufficientFunds() throws Exception {
+        String token = register("c@example.com", "9001015000012").token;
+
+        mockMvc.perform(post("/api/account/withdraw")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"amount\": 999999.00}"))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.message", containsString("Insufficient funds")));
+
+        mockMvc.perform(get("/api/account").header("Authorization", "Bearer " + token))
+                .andExpect(jsonPath("$.balance", is(500.00)));
+    }
+
+    @Test
+    @DisplayName("Transfer moves money to another account by number")
+    void testTransfer() throws Exception {
+        Registered sender = register("sender@example.com", "9001015000013");
+        Registered receiver = register("receiver@example.com", "9001015000014");
+
+        mockMvc.perform(post("/api/account/transfer")
+                        .header("Authorization", "Bearer " + sender.token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"toAccountNumber\":\"" + receiver.accountNumber + "\",\"amount\":150.00,\"description\":\"Lunch\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.balance", is(350.00)));
+
+        mockMvc.perform(get("/api/account").header("Authorization", "Bearer " + receiver.token))
+                .andExpect(jsonPath("$.balance", is(650.00)));
+    }
+
+    @Test
+    @DisplayName("Transfer to a non-existent account returns 404")
+    void testTransferToMissingAccount() throws Exception {
+        String token = register("d@example.com", "9001015000015").token;
+
+        mockMvc.perform(post("/api/account/transfer")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"toAccountNumber\":\"0000000000\",\"amount\":10.00}"))
                 .andExpect(status().isNotFound());
     }
 
     @Test
-    @DisplayName("Test get account with error")
-    void testGetAccountWithError() throws Exception {
-        // Mock service behavior
-        when(bankingService.getAccount(ACCOUNT_ID)).thenThrow(new RuntimeException("Database error"));
-
-        // Perform request and verify response
-        mockMvc.perform(get("/api/accounts/{accountId}", ACCOUNT_ID))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.error", containsString("Error retrieving account: Database error")));
+    @DisplayName("Account endpoints reject unauthenticated requests with 401")
+    void testRequiresAuthentication() throws Exception {
+        mockMvc.perform(get("/api/account")).andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/api/account/deposit")
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"amount\":1.00}"))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test
-    @DisplayName("Test successful deposit")
-    void testDepositSuccess() throws Exception {
-        // Mock service behavior
-        BigDecimal depositAmount = new BigDecimal("500.00");
-        BigDecimal newBalance = INITIAL_BALANCE.add(depositAmount);
-        
-        BankAccount updatedAccount = new BankAccount(ACCOUNT_HOLDER_NAME, newBalance);
-        updatedAccount.setId(ACCOUNT_ID);
-        
-        when(bankingService.deposit(ACCOUNT_ID, depositAmount)).thenReturn(updatedAccount);
+    @DisplayName("A negative deposit amount is rejected by validation")
+    void testNegativeDepositRejected() throws Exception {
+        String token = register("e@example.com", "9001015000016").token;
 
-        // Create request body
-        Map<String, Object> requestBody = new HashMap<>();
-        requestBody.put("accountId", ACCOUNT_ID);
-        requestBody.put("amount", depositAmount);
+        mockMvc.perform(post("/api/account/deposit")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"amount\": -5.00}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.fieldErrors.amount", not(emptyOrNullString())));
+    }
 
-        // Perform request and verify response
-        mockMvc.perform(post("/api/deposit")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(requestBody)))
+    private record Registered(String token, String accountNumber) {}
+
+    @Test
+    @DisplayName("Same Idempotency-Key replays the first result instead of depositing twice")
+    void testIdempotentDeposit() throws Exception {
+        String token = register("idem@example.com", "9001015000020").token;
+        String key = "deposit-key-123";
+
+        // First deposit: 500 -> 600
+        mockMvc.perform(post("/api/account/deposit")
+                        .header("Authorization", "Bearer " + token)
+                        .header("Idempotency-Key", key)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"amount\": 100.00}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.message", is("Deposit successful")))
-                .andExpect(jsonPath("$.newBalance", is(1500.00)))
-                .andExpect(jsonPath("$.accountId", is(1)));
-    }
+                .andExpect(jsonPath("$.balance", is(600.00)));
 
-    @Test
-    @DisplayName("Test deposit with negative amount")
-    void testDepositWithNegativeAmount() throws Exception {
-        // Create request body with negative amount
-        Map<String, Object> requestBody = new HashMap<>();
-        requestBody.put("accountId", ACCOUNT_ID);
-        requestBody.put("amount", -100.00);
-
-        // Perform request and verify response
-        mockMvc.perform(post("/api/deposit")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(requestBody)))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.error", is("Amount must be greater than 0")));
-    }
-
-    @Test
-    @DisplayName("Test deposit with error")
-    void testDepositWithError() throws Exception {
-        // Mock service behavior
-        when(bankingService.deposit(anyLong(), any(BigDecimal.class)))
-                .thenThrow(new RuntimeException("Account not found"));
-
-        // Create request body
-        Map<String, Object> requestBody = new HashMap<>();
-        requestBody.put("accountId", ACCOUNT_ID);
-        requestBody.put("amount", 500.00);
-
-        // Perform request and verify response
-        mockMvc.perform(post("/api/deposit")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(requestBody)))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.error", is("Deposit failed: Account not found")));
-    }
-
-    @Test
-    @DisplayName("Test successful withdrawal")
-    void testWithdrawSuccess() throws Exception {
-        // Mock service behavior
-        BigDecimal withdrawAmount = new BigDecimal("300.00");
-        BigDecimal newBalance = INITIAL_BALANCE.subtract(withdrawAmount);
-        
-        BankAccount updatedAccount = new BankAccount(ACCOUNT_HOLDER_NAME, newBalance);
-        updatedAccount.setId(ACCOUNT_ID);
-        
-        when(bankingService.withdraw(ACCOUNT_ID, withdrawAmount)).thenReturn(updatedAccount);
-
-        // Create request body
-        Map<String, Object> requestBody = new HashMap<>();
-        requestBody.put("accountId", ACCOUNT_ID);
-        requestBody.put("amount", withdrawAmount);
-
-        // Perform request and verify response
-        mockMvc.perform(post("/api/withdraw")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(requestBody)))
+        // Retry with the same key + same body: replayed, balance NOT 700.
+        mockMvc.perform(post("/api/account/deposit")
+                        .header("Authorization", "Bearer " + token)
+                        .header("Idempotency-Key", key)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"amount\": 100.00}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.message", is("Withdrawal successful")))
-                .andExpect(jsonPath("$.newBalance", is(700.00)))
-                .andExpect(jsonPath("$.accountId", is(1)));
+                .andExpect(jsonPath("$.balance", is(600.00)));
+
+        // Ground truth: the account moved exactly once.
+        mockMvc.perform(get("/api/account").header("Authorization", "Bearer " + token))
+                .andExpect(jsonPath("$.balance", is(600.00)));
     }
 
     @Test
-    @DisplayName("Test withdrawal with negative amount")
-    void testWithdrawWithNegativeAmount() throws Exception {
-        // Create request body with negative amount
-        Map<String, Object> requestBody = new HashMap<>();
-        requestBody.put("accountId", ACCOUNT_ID);
-        requestBody.put("amount", -100.00);
+    @DisplayName("Reusing an Idempotency-Key with different parameters is a 409 conflict")
+    void testIdempotencyKeyReuseConflict() throws Exception {
+        String token = register("idem2@example.com", "9001015000021").token;
+        String key = "reused-key-456";
 
-        // Perform request and verify response
-        mockMvc.perform(post("/api/withdraw")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(requestBody)))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.error", is("Amount must be greater than 0")));
+        mockMvc.perform(post("/api/account/deposit")
+                        .header("Authorization", "Bearer " + token)
+                        .header("Idempotency-Key", key)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"amount\": 100.00}"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/account/deposit")
+                        .header("Authorization", "Bearer " + token)
+                        .header("Idempotency-Key", key)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"amount\": 999.00}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message", containsString("different request parameters")));
     }
 
     @Test
-    @DisplayName("Test withdrawal with error")
-    void testWithdrawWithError() throws Exception {
-        // Mock service behavior
-        when(bankingService.withdraw(anyLong(), any(BigDecimal.class)))
-                .thenThrow(new RuntimeException("Insufficient funds"));
+    @DisplayName("A transfer's debit leg can be rendered as a SWIFT MT103 message")
+    void testSwiftMt103ForTransfer() throws Exception {
+        Registered sender = register("swiftsender@example.com", "9001015000022");
+        Registered receiver = register("swiftreceiver@example.com", "9001015000023");
 
-        // Create request body
-        Map<String, Object> requestBody = new HashMap<>();
-        requestBody.put("accountId", ACCOUNT_ID);
-        requestBody.put("amount", 300.00);
+        mockMvc.perform(post("/api/account/transfer")
+                        .header("Authorization", "Bearer " + sender.token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"toAccountNumber\":\"" + receiver.accountNumber
+                                + "\",\"amount\":150.00,\"description\":\"Rent\"}"))
+                .andExpect(status().isOk());
 
-        // Perform request and verify response
-        mockMvc.perform(post("/api/withdraw")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(requestBody)))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.error", is("Withdrawal failed: Insufficient funds")));
-    }
-
-    @Test
-    @DisplayName("Test create account")
-    void testCreateAccount() throws Exception {
-        // Mock service behavior
-        when(bankingService.createAccount(ACCOUNT_HOLDER_NAME, INITIAL_BALANCE)).thenReturn(testAccount);
-
-        // Create request body
-        Map<String, Object> requestBody = new HashMap<>();
-        requestBody.put("name", ACCOUNT_HOLDER_NAME);
-        requestBody.put("initialBalance", INITIAL_BALANCE);
-
-        // Perform request and verify response
-        mockMvc.perform(post("/api/accounts")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(requestBody)))
+        // Newest ledger entry on the sender is the TRANSFER_OUT leg.
+        String ledger = mockMvc.perform(get("/api/account/transactions")
+                        .header("Authorization", "Bearer " + sender.token))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.id", is(1)))
-                .andExpect(jsonPath("$.accountHolderName", is(ACCOUNT_HOLDER_NAME)))
-                .andExpect(jsonPath("$.balance", is(1000.00)))
-                .andExpect(jsonPath("$.accountNumber", is("1234567890")));
+                .andReturn().getResponse().getContentAsString();
+        JsonNode top = objectMapper.readTree(ledger).get("content").get(0);
+        long txId = top.get("id").asLong();
+
+        mockMvc.perform(get("/api/account/transactions/" + txId + "/swift")
+                        .header("Authorization", "Bearer " + sender.token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.messageType", is("MT103")))
+                .andExpect(jsonPath("$.message", containsString(":20:")))
+                .andExpect(jsonPath("$.message", containsString(":32A:")))
+                .andExpect(jsonPath("$.message", containsString("ZAR150,00")))
+                .andExpect(jsonPath("$.message", containsString(":71A:SHA")))
+                .andExpect(jsonPath("$.message", containsString(receiver.accountNumber)));
     }
 
     @Test
-    @DisplayName("Test create account with error")
-    void testCreateAccountWithError() throws Exception {
-        // Mock service behavior
-        when(bankingService.createAccount(any(), any()))
-                .thenThrow(new RuntimeException("Invalid account data"));
+    @DisplayName("SWIFT generation is rejected for a non-transfer transaction")
+    void testSwiftRejectedForDeposit() throws Exception {
+        String token = register("swiftdep@example.com", "9001015000024").token;
 
-        // Create request body
-        Map<String, Object> requestBody = new HashMap<>();
-        requestBody.put("name", ACCOUNT_HOLDER_NAME);
-        requestBody.put("initialBalance", INITIAL_BALANCE);
+        String ledger = mockMvc.perform(get("/api/account/transactions")
+                        .header("Authorization", "Bearer " + token))
+                .andReturn().getResponse().getContentAsString();
+        long openingTxId = objectMapper.readTree(ledger).get("content").get(0).get("id").asLong();
 
-        // Perform request and verify response
-        mockMvc.perform(post("/api/accounts")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(requestBody)))
+        mockMvc.perform(get("/api/account/transactions/" + openingTxId + "/swift")
+                        .header("Authorization", "Bearer " + token))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.error", is("Account creation failed: Invalid account data")));
+                .andExpect(jsonPath("$.message", containsString("transfer")));
+    }
+
+    private Registered register(String email, String idNumber) throws Exception {
+        Map<String, Object> body = Map.of(
+                "firstName", "Test", "lastName", "User", "email", email,
+                "idNumber", idNumber, "phoneNumber", "0712345678",
+                "password", "securepassword", "initialDeposit", 500.00);
+        String response = mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(body)))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        JsonNode node = objectMapper.readTree(response);
+        return new Registered(node.get("token").asText(), node.get("accountNumber").asText());
     }
 }
