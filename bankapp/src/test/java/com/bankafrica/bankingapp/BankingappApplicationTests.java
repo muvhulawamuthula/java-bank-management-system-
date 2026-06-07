@@ -1,10 +1,8 @@
 package com.bankafrica.bankingapp;
 
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
 
-@SpringBootTest
-class BankingappApplicationTests {
+class BankingappApplicationTests extends BaseTest {
 
 	@Test
 	void contextLoads() {

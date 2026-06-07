@@ -1,6 +1,5 @@
 package com.bankafrica.bankingapp.model;
 
-import com.bankafrica.bankingapp.BaseTest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -10,9 +9,9 @@ import java.math.BigDecimal;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Unit tests for the BankAccount model class.
+ * Unit tests for the BankAccount model class. Pure POJO test — no Spring context required.
  */
-class BankAccountTest extends BaseTest {
+class BankAccountTest {
 
     private BankAccount bankAccount;
     private final String ACCOUNT_HOLDER_NAME = "Test User";
@@ -115,9 +114,10 @@ class BankAccountTest extends BaseTest {
     void testWithdrawWithAmountEqualToBalance() {
         // Test withdrawing an amount equal to the balance
         boolean result = bankAccount.withdraw(INITIAL_BALANCE);
-        
+
         assertTrue(result);
-        assertEquals(BigDecimal.ZERO, bankAccount.getBalance());
+        // Compare by value: 0.00 and ZERO are numerically equal but differ in scale.
+        assertEquals(0, BigDecimal.ZERO.compareTo(bankAccount.getBalance()));
     }
 
     @Test

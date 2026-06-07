@@ -1,96 +1,56 @@
 package com.bankafrica.bankingapp.controller;
 
-
-
+import com.bankafrica.bankingapp.dto.AuthResponse;
+import com.bankafrica.bankingapp.dto.LoginRequest;
+import com.bankafrica.bankingapp.dto.ProfileResponse;
+import com.bankafrica.bankingapp.dto.RegisterRequest;
+import com.bankafrica.bankingapp.exception.InvalidCredentialsException;
 import com.bankafrica.bankingapp.model.User;
+import com.bankafrica.bankingapp.security.JwtService;
 import com.bankafrica.bankingapp.service.AuthService;
-import org.springframework.beans.factory.annotation.Autowired;
+import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
-
-import java.math.BigDecimal;
-import java.util.HashMap;
-import java.util.Map;
 
 @RestController
 @RequestMapping("/api/auth")
-@CrossOrigin(origins = "*")
 public class AuthController {
 
-    @Autowired
-    private AuthService authService;
+    private final AuthService authService;
+    private final JwtService jwtService;
 
-    
+    public AuthController(AuthService authService, JwtService jwtService) {
+        this.authService = authService;
+        this.jwtService = jwtService;
+    }
+
     @PostMapping("/register")
-    public ResponseEntity<?> register(@RequestBody Map<String, Object> request) {
-        try {
-            String firstName = request.get("firstName").toString();
-            String lastName = request.get("lastName").toString();
-            String email = request.get("email").toString();
-            String idNumber = request.get("idNumber").toString();
-            String phoneNumber = request.get("phoneNumber").toString();
-            String password = request.get("password").toString();
-            BigDecimal initialDeposit = new BigDecimal(request.get("initialDeposit").toString());
-
-            User user = authService.registerUser(firstName, lastName, email,
-                    idNumber, phoneNumber, password, initialDeposit);
-
-            Map<String, Object> response = new HashMap<>();
-            response.put("message", "Registration successful");
-            response.put("userId", user.getId());
-            response.put("email", user.getEmail());
-
-            return ResponseEntity.ok(response);
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
-        }
+    public ResponseEntity<AuthResponse> register(@Valid @RequestBody RegisterRequest request) {
+        User user = authService.registerUser(
+                request.firstName(), request.lastName(), request.email(), request.idNumber(),
+                request.phoneNumber(), request.password(), request.initialDeposit());
+        String token = jwtService.generateToken(user);
+        return ResponseEntity.status(HttpStatus.CREATED).body(AuthResponse.from(user, token));
     }
 
-    
     @PostMapping("/login")
-    public ResponseEntity<?> login(@RequestBody Map<String, String> request) {
-        try {
-            String email = request.get("email");
-            String password = request.get("password");
-
-            User user = authService.loginUser(email, password);
-
-            Map<String, Object> response = new HashMap<>();
-            response.put("userId", user.getId());
-            response.put("firstName", user.getFirstName());
-            response.put("lastName", user.getLastName());
-            response.put("email", user.getEmail());
-            response.put("accountId", user.getBankAccount().getId());
-            response.put("accountNumber", user.getBankAccount().getAccountNumber());
-            response.put("balance", user.getBankAccount().getBalance());
-
-            return ResponseEntity.ok(response);
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
-        }
+    public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
+        User user = authService.loginUser(request.email(), request.password());
+        String token = jwtService.generateToken(user);
+        return ResponseEntity.ok(AuthResponse.from(user, token));
     }
 
-    
-    @GetMapping("/profile/{userId}")
-    public ResponseEntity<?> getUserProfile(@PathVariable Long userId) {
-        try {
-            User user = authService.getUserById(userId);
-            if (user == null) {
-                return ResponseEntity.notFound().build();
-            }
-
-            Map<String, Object> response = new HashMap<>();
-            response.put("userId", user.getId());
-            response.put("firstName", user.getFirstName());
-            response.put("lastName", user.getLastName());
-            response.put("email", user.getEmail());
-            response.put("phoneNumber", user.getPhoneNumber());
-            response.put("accountNumber", user.getBankAccount().getAccountNumber());
-            response.put("balance", user.getBankAccount().getBalance());
-
-            return ResponseEntity.ok(response);
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body("Error retrieving profile: " + e.getMessage());
+    /** Returns the profile of the currently authenticated user (replaces the old,
+     *  unauthenticated /profile/{userId} endpoint that allowed reading anyone's data). */
+    @GetMapping("/me")
+    public ResponseEntity<ProfileResponse> me(@AuthenticationPrincipal UserDetails principal) {
+        User user = authService.getUserByEmail(principal.getUsername());
+        if (user == null) {
+            throw new InvalidCredentialsException();
         }
+        return ResponseEntity.ok(ProfileResponse.from(user));
     }
 }
