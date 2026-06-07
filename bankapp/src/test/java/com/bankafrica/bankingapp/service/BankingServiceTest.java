@@ -1,15 +1,16 @@
 package com.bankafrica.bankingapp.service;
 
-import com.bankafrica.bankingapp.BaseTest;
+import com.bankafrica.bankingapp.exception.AccountNotFoundException;
+import com.bankafrica.bankingapp.exception.InsufficientFundsException;
+import com.bankafrica.bankingapp.exception.InvalidRequestException;
 import com.bankafrica.bankingapp.model.BankAccount;
 import com.bankafrica.bankingapp.repository.BankAccountRepository;
+import com.bankafrica.bankingapp.repository.TransactionRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
-import org.springframework.boot.test.context.SpringBootTest;
 
 import java.math.BigDecimal;
 import java.util.Optional;
@@ -19,15 +20,17 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 /**
- * Unit tests for the BankingService class.
+ * Unit tests for {@link BankingService}. Verifies that balance mutations load the
+ * account under a write lock ({@code findByIdForUpdate}) and that every successful
+ * movement is written to the transaction ledger.
  */
-@SpringBootTest
-class BankingServiceTest extends BaseTest {
+class BankingServiceTest {
 
     @Mock
     private BankAccountRepository bankAccountRepository;
+    @Mock
+    private TransactionRepository transactionRepository;
 
-    @InjectMocks
     private BankingService bankingService;
 
     private BankAccount testAccount;
@@ -38,8 +41,8 @@ class BankingServiceTest extends BaseTest {
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
-        
-        // Create a test account
+        bankingService = new BankingService(bankAccountRepository, transactionRepository);
+
         testAccount = new BankAccount(ACCOUNT_HOLDER_NAME, INITIAL_BALANCE);
         testAccount.setId(ACCOUNT_ID);
     }
@@ -47,244 +50,160 @@ class BankingServiceTest extends BaseTest {
     @Test
     @DisplayName("Test get account by ID")
     void testGetAccount() {
-        // Mock repository behavior
         when(bankAccountRepository.findById(ACCOUNT_ID)).thenReturn(Optional.of(testAccount));
         when(bankAccountRepository.findById(2L)).thenReturn(Optional.empty());
 
-        // Call the service method for existing account
         BankAccount foundAccount = bankingService.getAccount(ACCOUNT_ID);
-        
-        // Verify the result
         assertNotNull(foundAccount);
         assertEquals(testAccount, foundAccount);
-        assertEquals(ACCOUNT_HOLDER_NAME, foundAccount.getAccountHolderName());
-        assertEquals(INITIAL_BALANCE, foundAccount.getBalance());
 
-        // Call the service method for non-existent account
-        BankAccount notFoundAccount = bankingService.getAccount(2L);
-        
-        // Verify the result
-        assertNull(notFoundAccount);
+        assertThrows(AccountNotFoundException.class, () -> bankingService.getAccount(2L));
 
-        // Verify repository interactions
         verify(bankAccountRepository).findById(ACCOUNT_ID);
         verify(bankAccountRepository).findById(2L);
     }
 
     @Test
-    @DisplayName("Test successful deposit")
+    @DisplayName("Test successful deposit records a ledger entry")
     void testDepositSuccess() {
-        // Mock repository behavior
-        when(bankAccountRepository.findById(ACCOUNT_ID)).thenReturn(Optional.of(testAccount));
-        when(bankAccountRepository.save(any(BankAccount.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(bankAccountRepository.findByIdForUpdate(ACCOUNT_ID)).thenReturn(Optional.of(testAccount));
+        when(bankAccountRepository.save(any(BankAccount.class))).thenAnswer(i -> i.getArgument(0));
 
-        // Call the service method
         BigDecimal depositAmount = new BigDecimal("500.00");
         BankAccount updatedAccount = bankingService.deposit(ACCOUNT_ID, depositAmount);
 
-        // Verify the result
-        assertNotNull(updatedAccount);
         assertEquals(INITIAL_BALANCE.add(depositAmount), updatedAccount.getBalance());
-
-        // Verify repository interactions
-        verify(bankAccountRepository).findById(ACCOUNT_ID);
+        verify(bankAccountRepository).findByIdForUpdate(ACCOUNT_ID);
         verify(bankAccountRepository).save(any(BankAccount.class));
+        verify(transactionRepository).save(any());
     }
 
     @Test
     @DisplayName("Test deposit with non-existent account")
     void testDepositWithNonExistentAccount() {
-        // Mock repository behavior
-        when(bankAccountRepository.findById(ACCOUNT_ID)).thenReturn(Optional.empty());
+        when(bankAccountRepository.findByIdForUpdate(ACCOUNT_ID)).thenReturn(Optional.empty());
 
-        // Call the service method and verify exception
-        BigDecimal depositAmount = new BigDecimal("500.00");
-        Exception exception = assertThrows(RuntimeException.class, () -> {
-            bankingService.deposit(ACCOUNT_ID, depositAmount);
-        });
+        Exception exception = assertThrows(AccountNotFoundException.class, () ->
+                bankingService.deposit(ACCOUNT_ID, new BigDecimal("500.00")));
 
         assertEquals("Account not found with ID: " + ACCOUNT_ID, exception.getMessage());
-
-        // Verify repository interactions
-        verify(bankAccountRepository).findById(ACCOUNT_ID);
         verify(bankAccountRepository, never()).save(any(BankAccount.class));
+        verify(transactionRepository, never()).save(any());
     }
 
     @Test
-    @DisplayName("Test deposit with negative amount")
+    @DisplayName("Test deposit with negative amount is rejected before any DB access")
     void testDepositWithNegativeAmount() {
-        // Mock repository behavior
-        when(bankAccountRepository.findById(ACCOUNT_ID)).thenReturn(Optional.of(testAccount));
-
-        // Call the service method and verify exception
-        BigDecimal negativeAmount = new BigDecimal("-100.00");
-        Exception exception = assertThrows(RuntimeException.class, () -> {
-            bankingService.deposit(ACCOUNT_ID, negativeAmount);
-        });
+        Exception exception = assertThrows(InvalidRequestException.class, () ->
+                bankingService.deposit(ACCOUNT_ID, new BigDecimal("-100.00")));
 
         assertEquals("Deposit amount must be positive", exception.getMessage());
-
-        // Verify repository interactions
-        verify(bankAccountRepository).findById(ACCOUNT_ID);
+        verify(bankAccountRepository, never()).findByIdForUpdate(any());
         verify(bankAccountRepository, never()).save(any(BankAccount.class));
     }
 
     @Test
-    @DisplayName("Test deposit with zero amount")
+    @DisplayName("Test deposit with zero amount is rejected")
     void testDepositWithZeroAmount() {
-        // Mock repository behavior
-        when(bankAccountRepository.findById(ACCOUNT_ID)).thenReturn(Optional.of(testAccount));
-
-        // Call the service method and verify exception
-        Exception exception = assertThrows(RuntimeException.class, () -> {
-            bankingService.deposit(ACCOUNT_ID, BigDecimal.ZERO);
-        });
+        Exception exception = assertThrows(InvalidRequestException.class, () ->
+                bankingService.deposit(ACCOUNT_ID, BigDecimal.ZERO));
 
         assertEquals("Deposit amount must be positive", exception.getMessage());
-
-        // Verify repository interactions
-        verify(bankAccountRepository).findById(ACCOUNT_ID);
         verify(bankAccountRepository, never()).save(any(BankAccount.class));
     }
 
     @Test
-    @DisplayName("Test successful withdrawal")
+    @DisplayName("Test successful withdrawal records a ledger entry")
     void testWithdrawSuccess() {
-        // Mock repository behavior
-        when(bankAccountRepository.findById(ACCOUNT_ID)).thenReturn(Optional.of(testAccount));
-        when(bankAccountRepository.save(any(BankAccount.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(bankAccountRepository.findByIdForUpdate(ACCOUNT_ID)).thenReturn(Optional.of(testAccount));
+        when(bankAccountRepository.save(any(BankAccount.class))).thenAnswer(i -> i.getArgument(0));
 
-        // Call the service method
         BigDecimal withdrawAmount = new BigDecimal("300.00");
         BankAccount updatedAccount = bankingService.withdraw(ACCOUNT_ID, withdrawAmount);
 
-        // Verify the result
-        assertNotNull(updatedAccount);
         assertEquals(INITIAL_BALANCE.subtract(withdrawAmount), updatedAccount.getBalance());
-
-        // Verify repository interactions
-        verify(bankAccountRepository).findById(ACCOUNT_ID);
+        verify(bankAccountRepository).findByIdForUpdate(ACCOUNT_ID);
         verify(bankAccountRepository).save(any(BankAccount.class));
+        verify(transactionRepository).save(any());
     }
 
     @Test
     @DisplayName("Test withdrawal with non-existent account")
     void testWithdrawWithNonExistentAccount() {
-        // Mock repository behavior
-        when(bankAccountRepository.findById(ACCOUNT_ID)).thenReturn(Optional.empty());
+        when(bankAccountRepository.findByIdForUpdate(ACCOUNT_ID)).thenReturn(Optional.empty());
 
-        // Call the service method and verify exception
-        BigDecimal withdrawAmount = new BigDecimal("300.00");
-        Exception exception = assertThrows(RuntimeException.class, () -> {
-            bankingService.withdraw(ACCOUNT_ID, withdrawAmount);
-        });
+        Exception exception = assertThrows(AccountNotFoundException.class, () ->
+                bankingService.withdraw(ACCOUNT_ID, new BigDecimal("300.00")));
 
         assertEquals("Account not found with ID: " + ACCOUNT_ID, exception.getMessage());
-
-        // Verify repository interactions
-        verify(bankAccountRepository).findById(ACCOUNT_ID);
         verify(bankAccountRepository, never()).save(any(BankAccount.class));
     }
 
     @Test
-    @DisplayName("Test withdrawal with negative amount")
+    @DisplayName("Test withdrawal with negative amount is rejected")
     void testWithdrawWithNegativeAmount() {
-        // Mock repository behavior
-        when(bankAccountRepository.findById(ACCOUNT_ID)).thenReturn(Optional.of(testAccount));
-
-        // Call the service method and verify exception
-        BigDecimal negativeAmount = new BigDecimal("-100.00");
-        Exception exception = assertThrows(RuntimeException.class, () -> {
-            bankingService.withdraw(ACCOUNT_ID, negativeAmount);
-        });
+        Exception exception = assertThrows(InvalidRequestException.class, () ->
+                bankingService.withdraw(ACCOUNT_ID, new BigDecimal("-100.00")));
 
         assertEquals("Withdrawal amount must be positive", exception.getMessage());
-
-        // Verify repository interactions
-        verify(bankAccountRepository).findById(ACCOUNT_ID);
-        verify(bankAccountRepository, never()).save(any(BankAccount.class));
+        verify(bankAccountRepository, never()).findByIdForUpdate(any());
     }
 
     @Test
-    @DisplayName("Test withdrawal with zero amount")
+    @DisplayName("Test withdrawal with zero amount is rejected")
     void testWithdrawWithZeroAmount() {
-        // Mock repository behavior
-        when(bankAccountRepository.findById(ACCOUNT_ID)).thenReturn(Optional.of(testAccount));
-
-        // Call the service method and verify exception
-        Exception exception = assertThrows(RuntimeException.class, () -> {
-            bankingService.withdraw(ACCOUNT_ID, BigDecimal.ZERO);
-        });
+        Exception exception = assertThrows(InvalidRequestException.class, () ->
+                bankingService.withdraw(ACCOUNT_ID, BigDecimal.ZERO));
 
         assertEquals("Withdrawal amount must be positive", exception.getMessage());
-
-        // Verify repository interactions
-        verify(bankAccountRepository).findById(ACCOUNT_ID);
         verify(bankAccountRepository, never()).save(any(BankAccount.class));
     }
 
     @Test
     @DisplayName("Test withdrawal with insufficient funds")
     void testWithdrawWithInsufficientFunds() {
-        // Mock repository behavior
-        when(bankAccountRepository.findById(ACCOUNT_ID)).thenReturn(Optional.of(testAccount));
+        when(bankAccountRepository.findByIdForUpdate(ACCOUNT_ID)).thenReturn(Optional.of(testAccount));
 
-        // Call the service method and verify exception
         BigDecimal excessiveAmount = INITIAL_BALANCE.add(new BigDecimal("100.00"));
-        Exception exception = assertThrows(RuntimeException.class, () -> {
-            bankingService.withdraw(ACCOUNT_ID, excessiveAmount);
-        });
+        Exception exception = assertThrows(InsufficientFundsException.class, () ->
+                bankingService.withdraw(ACCOUNT_ID, excessiveAmount));
 
-        assertTrue(exception.getMessage().startsWith("Insufficient funds. Current balance: $"));
-
-        // Verify repository interactions
-        verify(bankAccountRepository).findById(ACCOUNT_ID);
+        assertTrue(exception.getMessage().startsWith("Insufficient funds. Current balance: R"));
         verify(bankAccountRepository, never()).save(any(BankAccount.class));
+        verify(transactionRepository, never()).save(any());
     }
 
     @Test
     @DisplayName("Test create account")
     void testCreateAccount() {
-        // Mock repository behavior
         when(bankAccountRepository.save(any(BankAccount.class))).thenAnswer(invocation -> {
-            BankAccount savedAccount = invocation.getArgument(0);
-            savedAccount.setId(ACCOUNT_ID);
-            return savedAccount;
+            BankAccount saved = invocation.getArgument(0);
+            saved.setId(ACCOUNT_ID);
+            return saved;
         });
 
-        // Call the service method
         BankAccount createdAccount = bankingService.createAccount(ACCOUNT_HOLDER_NAME, INITIAL_BALANCE);
 
-        // Verify the result
         assertNotNull(createdAccount);
         assertEquals(ACCOUNT_HOLDER_NAME, createdAccount.getAccountHolderName());
         assertEquals(INITIAL_BALANCE, createdAccount.getBalance());
         assertEquals(ACCOUNT_ID, createdAccount.getId());
-
-        // Verify repository interactions
         verify(bankAccountRepository).save(any(BankAccount.class));
     }
 
     @Test
     @DisplayName("Test create account with null balance")
     void testCreateAccountWithNullBalance() {
-        // Mock repository behavior
         when(bankAccountRepository.save(any(BankAccount.class))).thenAnswer(invocation -> {
-            BankAccount savedAccount = invocation.getArgument(0);
-            savedAccount.setId(ACCOUNT_ID);
-            return savedAccount;
+            BankAccount saved = invocation.getArgument(0);
+            saved.setId(ACCOUNT_ID);
+            return saved;
         });
 
-        // Call the service method
         BankAccount createdAccount = bankingService.createAccount(ACCOUNT_HOLDER_NAME, null);
 
-        // Verify the result
         assertNotNull(createdAccount);
-        assertEquals(ACCOUNT_HOLDER_NAME, createdAccount.getAccountHolderName());
         assertEquals(BigDecimal.ZERO, createdAccount.getBalance());
-        assertEquals(ACCOUNT_ID, createdAccount.getId());
-
-        // Verify repository interactions
         verify(bankAccountRepository).save(any(BankAccount.class));
     }
 }
