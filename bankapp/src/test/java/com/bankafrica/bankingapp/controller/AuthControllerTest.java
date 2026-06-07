@@ -1,208 +1,137 @@
 package com.bankafrica.bankingapp.controller;
 
-import com.bankafrica.bankingapp.model.BankAccount;
-import com.bankafrica.bankingapp.model.User;
-import com.bankafrica.bankingapp.service.AuthService;
+import com.bankafrica.bankingapp.BaseTest;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
-import java.util.HashMap;
 import java.util.Map;
 
 import static org.hamcrest.Matchers.*;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 /**
- * Integration tests for the AuthController.
- * Uses @WebMvcTest to test the controller's REST endpoints.
+ * End-to-end tests of the auth endpoints through the real Spring Security filter chain.
+ * Each test runs in a transaction that rolls back, so registrations don't leak.
  */
-@WebMvcTest(AuthController.class)
-@ActiveProfiles("test")
-class AuthControllerTest {
+@Transactional
+class AuthControllerTest extends BaseTest {
 
     @Autowired
     private MockMvc mockMvc;
-
     @Autowired
     private ObjectMapper objectMapper;
 
-    @MockBean
-    private AuthService authService;
-
-    private User testUser;
-    private BankAccount testAccount;
-    private final String FIRST_NAME = "John";
-    private final String LAST_NAME = "Doe";
-    private final String EMAIL = "john.doe@example.com";
-    private final String ID_NUMBER = "9001015000000";
-    private final String PHONE_NUMBER = "0712345678";
-    private final String PASSWORD = "securepassword";
-    private final BigDecimal INITIAL_DEPOSIT = new BigDecimal("500.00");
-
-    @BeforeEach
-    void setUp() {
-        // Create a test user with bank account
-        testUser = new User(FIRST_NAME, LAST_NAME, EMAIL, ID_NUMBER, PHONE_NUMBER, PASSWORD);
-        testUser.setId(1L);
-        
-        testAccount = new BankAccount(FIRST_NAME + " " + LAST_NAME, INITIAL_DEPOSIT);
-        testAccount.setId(1L);
-        testAccount.setAccountNumber("1234567890");
-        
-        testUser.setBankAccount(testAccount);
+    private Map<String, Object> validRegistration(String email, String idNumber) {
+        return Map.of(
+                "firstName", "John",
+                "lastName", "Doe",
+                "email", email,
+                "idNumber", idNumber,
+                "phoneNumber", "0712345678",
+                "password", "securepassword",
+                "initialDeposit", 500.00);
     }
 
     @Test
-    @DisplayName("Test successful user registration")
-    void testRegisterUserSuccess() throws Exception {
-        // Mock service behavior
-        when(authService.registerUser(
-                anyString(), anyString(), anyString(), anyString(), anyString(), anyString(), any(BigDecimal.class)))
-                .thenReturn(testUser);
-
-        // Create request body
-        Map<String, Object> requestBody = new HashMap<>();
-        requestBody.put("firstName", FIRST_NAME);
-        requestBody.put("lastName", LAST_NAME);
-        requestBody.put("email", EMAIL);
-        requestBody.put("idNumber", ID_NUMBER);
-        requestBody.put("phoneNumber", PHONE_NUMBER);
-        requestBody.put("password", PASSWORD);
-        requestBody.put("initialDeposit", INITIAL_DEPOSIT);
-
-        // Perform request and verify response
+    @DisplayName("Register returns 201 with a token and a funded account")
+    void testRegisterSuccess() throws Exception {
         mockMvc.perform(post("/api/auth/register")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(requestBody)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.message", is("Registration successful")))
-                .andExpect(jsonPath("$.userId", is(1)))
-                .andExpect(jsonPath("$.email", is(EMAIL)));
-    }
-
-    @Test
-    @DisplayName("Test registration with existing email")
-    void testRegisterUserWithExistingEmail() throws Exception {
-        // Mock service behavior
-        when(authService.registerUser(
-                anyString(), anyString(), anyString(), anyString(), anyString(), anyString(), any(BigDecimal.class)))
-                .thenThrow(new Exception("Email already registered"));
-
-        // Create request body
-        Map<String, Object> requestBody = new HashMap<>();
-        requestBody.put("firstName", FIRST_NAME);
-        requestBody.put("lastName", LAST_NAME);
-        requestBody.put("email", EMAIL);
-        requestBody.put("idNumber", ID_NUMBER);
-        requestBody.put("phoneNumber", PHONE_NUMBER);
-        requestBody.put("password", PASSWORD);
-        requestBody.put("initialDeposit", INITIAL_DEPOSIT);
-
-        // Perform request and verify response
-        mockMvc.perform(post("/api/auth/register")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(requestBody)))
-                .andExpect(status().isBadRequest())
-                .andExpect(content().string("Email already registered"));
-    }
-
-    @Test
-    @DisplayName("Test successful user login")
-    void testLoginUserSuccess() throws Exception {
-        // Mock service behavior
-        when(authService.loginUser(EMAIL, PASSWORD)).thenReturn(testUser);
-
-        // Create request body
-        Map<String, String> requestBody = new HashMap<>();
-        requestBody.put("email", EMAIL);
-        requestBody.put("password", PASSWORD);
-
-        // Perform request and verify response
-        mockMvc.perform(post("/api/auth/login")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(requestBody)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.userId", is(1)))
-                .andExpect(jsonPath("$.firstName", is(FIRST_NAME)))
-                .andExpect(jsonPath("$.lastName", is(LAST_NAME)))
-                .andExpect(jsonPath("$.email", is(EMAIL)))
-                .andExpect(jsonPath("$.accountId", is(1)))
-                .andExpect(jsonPath("$.accountNumber", is("1234567890")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(validRegistration("john@example.com", "9001015000000"))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.token", not(emptyOrNullString())))
+                .andExpect(jsonPath("$.email", is("john@example.com")))
+                .andExpect(jsonPath("$.accountNumber", matchesPattern("\\d{10}")))
                 .andExpect(jsonPath("$.balance", is(500.00)));
     }
 
     @Test
-    @DisplayName("Test login with invalid credentials")
-    void testLoginUserWithInvalidCredentials() throws Exception {
-        // Mock service behavior
-        when(authService.loginUser(anyString(), anyString()))
-                .thenThrow(new Exception("Invalid email or password"));
+    @DisplayName("Register with an invalid body returns 400 with field errors")
+    void testRegisterValidationFailure() throws Exception {
+        Map<String, Object> bad = Map.of(
+                "firstName", "",
+                "lastName", "Doe",
+                "email", "not-an-email",
+                "idNumber", "123",
+                "phoneNumber", "0712345678",
+                "password", "short",
+                "initialDeposit", 10.00);
 
-        // Create request body
-        Map<String, String> requestBody = new HashMap<>();
-        requestBody.put("email", EMAIL);
-        requestBody.put("password", "wrongpassword");
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(bad)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message", is("Validation failed")))
+                .andExpect(jsonPath("$.fieldErrors.email", not(emptyOrNullString())))
+                .andExpect(jsonPath("$.fieldErrors.password", not(emptyOrNullString())))
+                .andExpect(jsonPath("$.fieldErrors.initialDeposit", not(emptyOrNullString())));
+    }
 
-        // Perform request and verify response
+    @Test
+    @DisplayName("Registering a duplicate email returns 409")
+    void testRegisterDuplicateEmail() throws Exception {
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(validRegistration("dup@example.com", "9001015000000"))))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(validRegistration("dup@example.com", "9001015000001"))))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message", is("Email already registered")));
+    }
+
+    @Test
+    @DisplayName("Login returns a token; wrong password returns 401")
+    void testLogin() throws Exception {
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(validRegistration("login@example.com", "9001015000002"))))
+                .andExpect(status().isCreated());
+
         mockMvc.perform(post("/api/auth/login")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(requestBody)))
-                .andExpect(status().isBadRequest())
-                .andExpect(content().string("Invalid email or password"));
-    }
-
-    @Test
-    @DisplayName("Test get user profile")
-    void testGetUserProfile() throws Exception {
-        // Mock service behavior
-        when(authService.getUserById(1L)).thenReturn(testUser);
-
-        // Perform request and verify response
-        mockMvc.perform(get("/api/auth/profile/1"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"login@example.com\",\"password\":\"securepassword\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.userId", is(1)))
-                .andExpect(jsonPath("$.firstName", is(FIRST_NAME)))
-                .andExpect(jsonPath("$.lastName", is(LAST_NAME)))
-                .andExpect(jsonPath("$.email", is(EMAIL)))
-                .andExpect(jsonPath("$.phoneNumber", is(PHONE_NUMBER)))
-                .andExpect(jsonPath("$.accountNumber", is("1234567890")))
-                .andExpect(jsonPath("$.balance", is(500.00)));
+                .andExpect(jsonPath("$.token", not(emptyOrNullString())));
+
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"login@example.com\",\"password\":\"wrongpassword\"}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.message", is("Invalid email or password")));
     }
 
     @Test
-    @DisplayName("Test get non-existent user profile")
-    void testGetNonExistentUserProfile() throws Exception {
-        // Mock service behavior
-        when(authService.getUserById(999L)).thenReturn(null);
+    @DisplayName("/me requires a token and returns the caller's profile")
+    void testMeEndpoint() throws Exception {
+        String token = registerAndGetToken("me@example.com", "9001015000003");
 
-        // Perform request and verify response
-        mockMvc.perform(get("/api/auth/profile/999"))
-                .andExpect(status().isNotFound());
+        mockMvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.email", is("me@example.com")))
+                .andExpect(jsonPath("$.accountNumber", matchesPattern("\\d{10}")));
+
+        mockMvc.perform(get("/api/auth/me"))
+                .andExpect(status().isUnauthorized());
     }
 
-    @Test
-    @DisplayName("Test get user profile with error")
-    void testGetUserProfileWithError() throws Exception {
-        // Mock service behavior
-        when(authService.getUserById(1L)).thenThrow(new RuntimeException("Database error"));
-
-        // Perform request and verify response
-        mockMvc.perform(get("/api/auth/profile/1"))
-                .andExpect(status().isBadRequest())
-                .andExpect(content().string(containsString("Error retrieving profile: Database error")));
+    private String registerAndGetToken(String email, String idNumber) throws Exception {
+        String body = mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(validRegistration(email, idNumber))))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        JsonNode node = objectMapper.readTree(body);
+        return node.get("token").asText();
     }
 }

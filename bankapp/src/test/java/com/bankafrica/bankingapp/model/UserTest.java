@@ -1,6 +1,5 @@
 package com.bankafrica.bankingapp.model;
 
-import com.bankafrica.bankingapp.BaseTest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -11,9 +10,9 @@ import java.time.LocalDateTime;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Unit tests for the User model class.
+ * Unit tests for the User model class. Pure POJO test — no Spring context required.
  */
-class UserTest extends BaseTest {
+class UserTest {
 
     private User user;
     private final String FIRST_NAME = "John";

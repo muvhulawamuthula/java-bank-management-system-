@@ -308,6 +308,18 @@
                 text-align: center;
             }
         }
+
+        .muted { color: #888; font-size: 0.9rem; }
+        .txn {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 2px 12px;
+            padding: 12px 0;
+            border-bottom: 1px solid #eee;
+        }
+        .txn-label { font-weight: 600; }
+        .txn-amount { font-weight: 700; text-align: right; }
+        .txn-meta { grid-column: 1 / -1; color: #888; font-size: 0.8rem; }
     </style>
 </head>
 <body>
@@ -474,6 +486,17 @@
                     <button type="submit" class="btn btn-danger">Withdraw</button>
                 </form>
             </div>
+
+            <!-- Transaction history -->
+            <div class="card" style="grid-column: 1 / -1;">
+                <h3>
+                    <svg class="icon" viewBox="0 0 24 24">
+                        <path d="M13 3a9 9 0 0 0-9 9H1l3.89 3.89.07.14L9 12H6a7 7 0 1 1 7 7 6.96 6.96 0 0 1-4.95-2.05l-1.42 1.42A9 9 0 1 0 13 3zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z"/>
+                    </svg>
+                    Transaction History
+                </h3>
+                <div id="transactionList"><p class="muted">No transactions yet.</p></div>
+            </div>
         </div>
     </div>
 </div>
@@ -482,8 +505,40 @@
     
     let currentUser = null;
     let currentBalance = 0;
+    let authToken = null;
 
-    
+    // Attaches the bearer token (when present) to every API call.
+    async function apiFetch(url, options = {}) {
+        const headers = Object.assign(
+            { 'Content-Type': 'application/json' },
+            options.headers || {},
+            authToken ? { 'Authorization': 'Bearer ' + authToken } : {}
+        );
+        return fetch(url, Object.assign({}, options, { headers }));
+    }
+
+    // Pulls a human-readable message out of the standard ApiError JSON envelope.
+    async function errorMessage(response, fallback) {
+        try {
+            const body = await response.json();
+            if (body.fieldErrors) {
+                return Object.values(body.fieldErrors).join(' ');
+            }
+            return body.message || fallback;
+        } catch (e) {
+            return fallback;
+        }
+    }
+
+    function applyAccount(data) {
+        currentUser = data;
+        document.getElementById('userName').textContent = data.firstName || currentUser.firstName;
+        document.getElementById('accountNumber').value = data.accountNumber;
+        document.getElementById('accountHolder').value =
+            `${data.firstName || ''} ${data.lastName || ''}`.trim();
+        updateBalance(data.balance || 0);
+    }
+
     function showLoading() {
         document.getElementById('loading').style.display = 'block';
     }
@@ -536,11 +591,8 @@
                 return;
             }
 
-            const response = await fetch('/api/auth/register', {
+            const response = await apiFetch('/api/auth/register', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
                 body: JSON.stringify({
                     firstName: formData.firstName,
                     lastName: formData.lastName,
@@ -554,14 +606,15 @@
 
             if (response.ok) {
                 const result = await response.json();
-                showMessage('Registration successful! Please sign in.', 'success', 'registerMessages');
-                setTimeout(() => {
-                    showPage('loginPage');
-                    document.getElementById('registerForm').reset();
-                }, 2000);
+                authToken = result.token;
+                applyAccount(result);
+                document.getElementById('registerForm').reset();
+                showPage('dashboardPage');
+                showMessage(`Welcome to Bank Africa, ${result.firstName}!`, 'success');
+                loadTransactions();
             } else {
-                const error = await response.text();
-                showMessage(`Registration failed: ${error}`, 'error', 'registerMessages');
+                const message = await errorMessage(response, 'Registration failed');
+                showMessage(message, 'error', 'registerMessages');
             }
         } catch (error) {
             console.error('Registration error:', error);
@@ -575,11 +628,8 @@
         try {
             showLoading();
 
-            const response = await fetch('/api/auth/login', {
+            const response = await apiFetch('/api/auth/login', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
                 body: JSON.stringify({
                     email: email,
                     password: password
@@ -588,19 +638,15 @@
 
             if (response.ok) {
                 const user = await response.json();
-                currentUser = user;
-
-                
-                document.getElementById('userName').textContent = user.firstName;
-                document.getElementById('accountNumber').value = user.accountId;
-                document.getElementById('accountHolder').value = `${user.firstName} ${user.lastName}`;
-                updateBalance(user.balance || 0);
+                authToken = user.token;
+                applyAccount(user);
 
                 showPage('dashboardPage');
                 showMessage(`Welcome back, ${user.firstName}!`, 'success');
+                loadTransactions();
             } else {
-                const error = await response.text();
-                showMessage('Invalid email or password', 'error', 'loginMessages');
+                const message = await errorMessage(response, 'Invalid email or password');
+                showMessage(message, 'error', 'loginMessages');
             }
         } catch (error) {
             console.error('Login error:', error);
@@ -613,25 +659,26 @@
     function logout() {
         currentUser = null;
         currentBalance = 0;
+        authToken = null;
         showPage('loginPage');
         document.getElementById('loginForm').reset();
         showMessage('You have been logged out successfully.', 'info', 'loginMessages');
     }
 
-    
+
     async function refreshBalance() {
-        if (!currentUser) return;
+        if (!authToken) return;
 
         try {
             showLoading();
-            const response = await fetch(`/api/accounts/${currentUser.accountId}`);
+            const response = await apiFetch('/api/account');
 
             if (response.ok) {
                 const account = await response.json();
                 updateBalance(account.balance || 0);
                 showMessage('Balance updated successfully!', 'success');
             } else {
-                showMessage('Error refreshing balance', 'error');
+                showMessage(await errorMessage(response, 'Error refreshing balance'), 'error');
             }
         } catch (error) {
             console.error('Error refreshing balance:', error);
@@ -642,29 +689,23 @@
     }
 
     async function makeDeposit(amount) {
-        if (!currentUser) return;
+        if (!authToken) return;
 
         try {
             showLoading();
-            const response = await fetch('/api/deposit', {
+            const response = await apiFetch('/api/account/deposit', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    accountId: currentUser.accountId,
-                    amount: amount
-                })
+                body: JSON.stringify({ amount: amount })
             });
 
             if (response.ok) {
                 const result = await response.json();
-                updateBalance(result.newBalance || currentBalance + amount);
+                updateBalance(result.balance);
                 showMessage(`Successfully deposited ${formatCurrency(amount)}!`, 'success');
                 document.getElementById('depositForm').reset();
+                loadTransactions();
             } else {
-                const error = await response.text();
-                showMessage(`Deposit failed: ${error}`, 'error');
+                showMessage(await errorMessage(response, 'Deposit failed'), 'error');
             }
         } catch (error) {
             console.error('Error making deposit:', error);
@@ -675,40 +716,58 @@
     }
 
     async function makeWithdrawal(amount) {
-        if (!currentUser) return;
-
-        if (amount > currentBalance) {
-            showMessage('Insufficient funds for this withdrawal.', 'error');
-            return;
-        }
+        if (!authToken) return;
 
         try {
             showLoading();
-            const response = await fetch('/api/withdraw', {
+            const response = await apiFetch('/api/account/withdraw', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    accountId: currentUser.accountId,
-                    amount: amount
-                })
+                body: JSON.stringify({ amount: amount })
             });
 
             if (response.ok) {
                 const result = await response.json();
-                updateBalance(result.newBalance || currentBalance - amount);
+                updateBalance(result.balance);
                 showMessage(`Successfully withdrew ${formatCurrency(amount)}!`, 'success');
                 document.getElementById('withdrawForm').reset();
+                loadTransactions();
             } else {
-                const error = await response.text();
-                showMessage(`Withdrawal failed: ${error}`, 'error');
+                showMessage(await errorMessage(response, 'Withdrawal failed'), 'error');
             }
         } catch (error) {
             console.error('Error making withdrawal:', error);
             showMessage('Network error. Please try again.', 'error');
         } finally {
             hideLoading();
+        }
+    }
+
+    // Renders the account's ledger into #transactionList, if that element exists.
+    async function loadTransactions() {
+        if (!authToken) return;
+        const list = document.getElementById('transactionList');
+        if (!list) return;
+
+        try {
+            const response = await apiFetch('/api/account/transactions');
+            if (!response.ok) return;
+            const transactions = await response.json();
+            if (!transactions.length) {
+                list.innerHTML = '<p class="muted">No transactions yet.</p>';
+                return;
+            }
+            list.innerHTML = transactions.map(tx => {
+                const sign = (tx.type === 'WITHDRAWAL' || tx.type === 'TRANSFER_OUT') ? '-' : '+';
+                const when = new Date(tx.createdAt).toLocaleString();
+                const label = tx.description || tx.type;
+                return `<div class="txn">
+                    <span class="txn-label">${label}</span>
+                    <span class="txn-amount">${sign}${formatCurrency(tx.amount)}</span>
+                    <span class="txn-meta">${when} · Balance: ${formatCurrency(tx.balanceAfter)}</span>
+                </div>`;
+            }).join('');
+        } catch (error) {
+            console.error('Error loading transactions:', error);
         }
     }
 

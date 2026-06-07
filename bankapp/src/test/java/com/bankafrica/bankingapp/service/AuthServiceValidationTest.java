@@ -1,7 +1,8 @@
 package com.bankafrica.bankingapp.service;
 
-import com.bankafrica.bankingapp.BaseTest;
 import com.bankafrica.bankingapp.model.User;
+import com.bankafrica.bankingapp.repository.BankAccountRepository;
+import com.bankafrica.bankingapp.repository.TransactionRepository;
 import com.bankafrica.bankingapp.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -9,38 +10,42 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.context.ActiveProfiles;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.math.BigDecimal;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.lenient;
 
 /**
  * Tests for input validation and edge cases in the AuthService.
  */
-@SpringBootTest
-@ActiveProfiles("test")
-public class AuthServiceValidationTest extends BaseTest {
+public class AuthServiceValidationTest {
 
     @Mock
     private UserRepository userRepository;
+    @Mock
+    private BankAccountRepository bankAccountRepository;
+    @Mock
+    private TransactionRepository transactionRepository;
 
-    @InjectMocks
+    private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
     private AuthService authService;
 
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
-        
-        // Mock repository to allow registration (no existing users)
-        when(userRepository.existsByEmail(anyString())).thenReturn(false);
-        when(userRepository.existsByIdNumber(anyString())).thenReturn(false);
+        authService = new AuthService(userRepository, bankAccountRepository,
+                transactionRepository, passwordEncoder);
+
+        // Allow registration to proceed past the uniqueness checks (no existing users).
+        lenient().when(userRepository.existsByEmail(anyString())).thenReturn(false);
+        lenient().when(userRepository.existsByIdNumber(anyString())).thenReturn(false);
+        lenient().when(bankAccountRepository.existsByAccountNumber(anyString())).thenReturn(false);
     }
 
     @ParameterizedTest

@@ -24,7 +24,11 @@ public class BankAccount {
     @Column(name = "account_number", unique = true)
     private String accountNumber;
 
-    
+    @Version
+    @Column(name = "version")
+    private Long version;
+
+
     public BankAccount() {
         this.createdAt = LocalDateTime.now();
         this.accountNumber = generateAccountNumber();
@@ -86,7 +90,16 @@ public class BankAccount {
         this.accountNumber = accountNumber;
     }
 
-    
+    public Long getVersion() {
+        return version;
+    }
+
+    /** Assigns a fresh random account number; used by the service to retry on collisions. */
+    public void regenerateAccountNumber() {
+        this.accountNumber = generateAccountNumber();
+    }
+
+
     public void deposit(BigDecimal amount) {
         if (amount != null && amount.compareTo(BigDecimal.ZERO) > 0) {
             this.balance = this.balance.add(amount);
