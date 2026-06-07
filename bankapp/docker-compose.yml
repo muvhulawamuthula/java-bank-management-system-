@@ -1,0 +1,32 @@
+# Local MySQL for Bank Africa, matching the production datasource.
+#
+#   docker compose up -d          # start MySQL (waits until healthy)
+#   ./mvnw spring-boot:run \       # run the app against it (Flyway applies V1+V2)
+#     -Dspring-boot.run.jvmArguments="-DDB_URL=jdbc:mysql://localhost:3307/bank_africa_db"
+#   docker compose down           # stop;  add -v to also wipe the data volume
+#
+# Mapped to host port 3307 so it coexists with a local MySQL already on 3306.
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: bankapp-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpw
+      MYSQL_DATABASE: bank_africa_db
+      MYSQL_USER: bank_user
+      MYSQL_PASSWORD: bank_password
+    ports:
+      - "3307:3306"
+    volumes:
+      - bankapp-mysql-data:/var/lib/mysql
+    healthcheck:
+      # Compose holds `depends_on … condition: service_healthy` until this passes,
+      # so the app never races MySQL's first-boot initialisation.
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-prootpw"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+
+volumes:
+  bankapp-mysql-data:
