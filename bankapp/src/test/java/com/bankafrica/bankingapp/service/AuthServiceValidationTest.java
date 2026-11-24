@@ -21,9 +21,6 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.lenient;
 
-/**
- * Tests for input validation and edge cases in the AuthService.
- */
 public class AuthServiceValidationTest {
 
     @Mock
@@ -53,7 +50,6 @@ public class AuthServiceValidationTest {
     @ValueSource(strings = {"   ", "\t", "\n"})
     @DisplayName("Test registration with invalid first name")
     void testRegisterUserWithInvalidFirstName(String firstName) {
-        // Call the service method and verify exception
         Exception exception = assertThrows(Exception.class, () -> {
             authService.registerUser(
                 firstName,
@@ -74,7 +70,6 @@ public class AuthServiceValidationTest {
     @ValueSource(strings = {"   ", "\t", "\n"})
     @DisplayName("Test registration with invalid last name")
     void testRegisterUserWithInvalidLastName(String lastName) {
-        // Call the service method and verify exception
         Exception exception = assertThrows(Exception.class, () -> {
             authService.registerUser(
                 "John",
@@ -95,7 +90,6 @@ public class AuthServiceValidationTest {
     @ValueSource(strings = {"   ", "\t", "\n", "invalidemail", "email@", "@domain.com"})
     @DisplayName("Test registration with invalid email")
     void testRegisterUserWithInvalidEmail(String email) {
-        // Call the service method and verify exception
         Exception exception = assertThrows(Exception.class, () -> {
             authService.registerUser(
                 "John",
@@ -116,7 +110,6 @@ public class AuthServiceValidationTest {
     @ValueSource(strings = {"   ", "\t", "\n", "12345", "abcdefghij"})
     @DisplayName("Test registration with invalid ID number")
     void testRegisterUserWithInvalidIdNumber(String idNumber) {
-        // Call the service method and verify exception
         Exception exception = assertThrows(Exception.class, () -> {
             authService.registerUser(
                 "John",
@@ -137,7 +130,6 @@ public class AuthServiceValidationTest {
     @ValueSource(strings = {"   ", "\t", "\n", "12345", "abcdefghij"})
     @DisplayName("Test registration with invalid phone number")
     void testRegisterUserWithInvalidPhoneNumber(String phoneNumber) {
-        // Call the service method and verify exception
         Exception exception = assertThrows(Exception.class, () -> {
             authService.registerUser(
                 "John",
@@ -158,7 +150,6 @@ public class AuthServiceValidationTest {
     @ValueSource(strings = {"   ", "\t", "\n", "123", "weak"})
     @DisplayName("Test registration with invalid password")
     void testRegisterUserWithInvalidPassword(String password) {
-        // Call the service method and verify exception
         Exception exception = assertThrows(Exception.class, () -> {
             authService.registerUser(
                 "John",
@@ -177,7 +168,6 @@ public class AuthServiceValidationTest {
     @Test
     @DisplayName("Test registration with null initial deposit")
     void testRegisterUserWithNullInitialDeposit() {
-        // Call the service method and verify exception
         Exception exception = assertThrows(Exception.class, () -> {
             authService.registerUser(
                 "John",
@@ -196,7 +186,6 @@ public class AuthServiceValidationTest {
     @Test
     @DisplayName("Test registration with negative initial deposit")
     void testRegisterUserWithNegativeInitialDeposit() {
-        // Call the service method and verify exception
         Exception exception = assertThrows(Exception.class, () -> {
             authService.registerUser(
                 "John",
@@ -217,7 +206,6 @@ public class AuthServiceValidationTest {
     @ValueSource(strings = {"   ", "\t", "\n", "invalidemail", "email@", "@domain.com"})
     @DisplayName("Test login with invalid email")
     void testLoginWithInvalidEmail(String email) {
-        // Call the service method and verify exception
         Exception exception = assertThrows(Exception.class, () -> {
             authService.loginUser(email, "password123");
         });
@@ -230,7 +218,6 @@ public class AuthServiceValidationTest {
     @ValueSource(strings = {"   ", "\t", "\n"})
     @DisplayName("Test login with invalid password")
     void testLoginWithInvalidPassword(String password) {
-        // Call the service method and verify exception
         Exception exception = assertThrows(Exception.class, () -> {
             authService.loginUser("john.doe@example.com", password);
         });
@@ -241,10 +228,8 @@ public class AuthServiceValidationTest {
     @Test
     @DisplayName("Test get user by invalid ID")
     void testGetUserByInvalidId() {
-        // Call the service method with invalid ID
         User user = authService.getUserById(-1L);
         
-        // Verify that null is returned
         assertNull(user);
     }
 
@@ -253,10 +238,8 @@ public class AuthServiceValidationTest {
     @ValueSource(strings = {"   ", "\t", "\n", "invalidemail", "email@", "@domain.com"})
     @DisplayName("Test get user by invalid email")
     void testGetUserByInvalidEmail(String email) {
-        // Call the service method with invalid email
         User user = authService.getUserByEmail(email);
         
-        // Verify that null is returned
         assertNull(user);
     }
 }
