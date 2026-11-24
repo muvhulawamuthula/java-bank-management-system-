@@ -19,14 +19,12 @@ class BankAccountTest {
 
     @BeforeEach
     void setUp() {
-        // Create a fresh bank account before each test
         bankAccount = new BankAccount(ACCOUNT_HOLDER_NAME, INITIAL_BALANCE);
     }
 
     @Test
     @DisplayName("Test BankAccount constructor and getters")
     void testConstructorAndGetters() {
-        // Verify the constructor sets the properties correctly
         assertEquals(ACCOUNT_HOLDER_NAME, bankAccount.getAccountHolderName());
         assertEquals(INITIAL_BALANCE, bankAccount.getBalance());
         assertNotNull(bankAccount.getCreatedAt());
@@ -37,17 +35,14 @@ class BankAccountTest {
     @Test
     @DisplayName("Test BankAccount setters")
     void testSetters() {
-        // Test setting a new account holder name
         String newName = "New Test User";
         bankAccount.setAccountHolderName(newName);
         assertEquals(newName, bankAccount.getAccountHolderName());
 
-        // Test setting a new balance
         BigDecimal newBalance = new BigDecimal("2000.00");
         bankAccount.setBalance(newBalance);
         assertEquals(newBalance, bankAccount.getBalance());
 
-        // Test setting a new account number
         String newAccountNumber = "9876543210";
         bankAccount.setAccountNumber(newAccountNumber);
         assertEquals(newAccountNumber, bankAccount.getAccountNumber());
@@ -56,7 +51,6 @@ class BankAccountTest {
     @Test
     @DisplayName("Test deposit with valid amount")
     void testDepositWithValidAmount() {
-        // Test depositing a positive amount
         BigDecimal depositAmount = new BigDecimal("500.00");
         BigDecimal expectedBalance = INITIAL_BALANCE.add(depositAmount);
         
@@ -68,7 +62,6 @@ class BankAccountTest {
     @Test
     @DisplayName("Test deposit with zero amount")
     void testDepositWithZeroAmount() {
-        // Test depositing zero - should not change the balance
         BigDecimal depositAmount = BigDecimal.ZERO;
         
         bankAccount.deposit(depositAmount);
@@ -79,7 +72,6 @@ class BankAccountTest {
     @Test
     @DisplayName("Test deposit with negative amount")
     void testDepositWithNegativeAmount() {
-        // Test depositing a negative amount - should not change the balance
         BigDecimal depositAmount = new BigDecimal("-100.00");
         
         bankAccount.deposit(depositAmount);
@@ -90,7 +82,6 @@ class BankAccountTest {
     @Test
     @DisplayName("Test deposit with null amount")
     void testDepositWithNullAmount() {
-        // Test depositing null - should not change the balance
         bankAccount.deposit(null);
         
         assertEquals(INITIAL_BALANCE, bankAccount.getBalance());
@@ -99,7 +90,6 @@ class BankAccountTest {
     @Test
     @DisplayName("Test withdraw with valid amount")
     void testWithdrawWithValidAmount() {
-        // Test withdrawing a positive amount less than the balance
         BigDecimal withdrawAmount = new BigDecimal("300.00");
         BigDecimal expectedBalance = INITIAL_BALANCE.subtract(withdrawAmount);
         
@@ -112,7 +102,6 @@ class BankAccountTest {
     @Test
     @DisplayName("Test withdraw with amount equal to balance")
     void testWithdrawWithAmountEqualToBalance() {
-        // Test withdrawing an amount equal to the balance
         boolean result = bankAccount.withdraw(INITIAL_BALANCE);
 
         assertTrue(result);
@@ -123,7 +112,6 @@ class BankAccountTest {
     @Test
     @DisplayName("Test withdraw with amount greater than balance")
     void testWithdrawWithAmountGreaterThanBalance() {
-        // Test withdrawing an amount greater than the balance
         BigDecimal withdrawAmount = INITIAL_BALANCE.add(new BigDecimal("100.00"));
         
         boolean result = bankAccount.withdraw(withdrawAmount);
@@ -135,7 +123,6 @@ class BankAccountTest {
     @Test
     @DisplayName("Test withdraw with zero amount")
     void testWithdrawWithZeroAmount() {
-        // Test withdrawing zero - should not change the balance and return false
         boolean result = bankAccount.withdraw(BigDecimal.ZERO);
         
         assertFalse(result);
@@ -145,7 +132,6 @@ class BankAccountTest {
     @Test
     @DisplayName("Test withdraw with negative amount")
     void testWithdrawWithNegativeAmount() {
-        // Test withdrawing a negative amount - should not change the balance and return false
         BigDecimal withdrawAmount = new BigDecimal("-100.00");
         
         boolean result = bankAccount.withdraw(withdrawAmount);
@@ -157,7 +143,6 @@ class BankAccountTest {
     @Test
     @DisplayName("Test withdraw with null amount")
     void testWithdrawWithNullAmount() {
-        // Test withdrawing null - should not change the balance and return false
         boolean result = bankAccount.withdraw(null);
         
         assertFalse(result);
@@ -167,7 +152,6 @@ class BankAccountTest {
     @Test
     @DisplayName("Test toString method")
     void testToString() {
-        // Test that toString returns a non-null string containing key information
         String toString = bankAccount.toString();
         
         assertNotNull(toString);

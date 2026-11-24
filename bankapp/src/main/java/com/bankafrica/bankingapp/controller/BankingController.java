@@ -27,8 +27,7 @@ import org.springframework.web.bind.annotation.*;
 
 /**
  * Account operations always act on the <b>authenticated user's own</b> account, which
- * is resolved from the JWT — never from a client-supplied account id. This closes the
- * previous IDOR hole where any caller could deposit to or drain any account by id.
+ * is resolved from the JWT — never from a client-supplied account id.
  *
  * <p>The money-moving endpoints (deposit, withdraw, transfer) honour an optional
  * {@code Idempotency-Key} header: send the same key on a retry and the original result is
