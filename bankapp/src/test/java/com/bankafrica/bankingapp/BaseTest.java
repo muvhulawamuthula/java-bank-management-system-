@@ -22,22 +22,10 @@ import org.springframework.test.context.TestPropertySource;
 @Import(TestConfig.class)
 public abstract class BaseTest {
 
-    /**
-     * Setup method that runs before each test.
-     * Can be overridden by subclasses to add additional setup.
-     */
     @BeforeEach
     public void setup() {
-        // Common setup code can go here
-        // For example, resetting mocks, clearing caches, etc.
     }
     
-    /**
-     * Helper method to create test data.
-     * This provides a convenient way to access the TestDataFactory from test classes.
-     * 
-     * @return The TestDataFactory instance
-     */
     protected TestDataFactory getTestDataFactory() {
         return new TestDataFactory();
     }

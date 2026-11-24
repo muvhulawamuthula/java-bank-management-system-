@@ -43,8 +43,7 @@ public class AuthController {
         return ResponseEntity.ok(AuthResponse.from(user, token));
     }
 
-    /** Returns the profile of the currently authenticated user (replaces the old,
-     *  unauthenticated /profile/{userId} endpoint that allowed reading anyone's data). */
+    /** Returns the profile of the currently authenticated user. */
     @GetMapping("/me")
     public ResponseEntity<ProfileResponse> me(@AuthenticationPrincipal UserDetails principal) {
         User user = authService.getUserByEmail(principal.getUsername());
