@@ -253,3 +253,7 @@ where Docker is available it runs as part of the suite.
 ## 👥 Contributors
 
 - muthula muvhulawa
+
+## License
+
+MIT. See [LICENSE](LICENSE).
